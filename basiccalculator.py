@@ -63,14 +63,17 @@ def safe_eval(expr: str):
 
 
 def main():
-    print("qEjemplos válidos: 1+1, 2.5 * (3 - 1), -4**2, 10 // 3")
+    print("Ejemplos válidos: 1+1, 2.5 * (3 - 1), -4**2, 10 // 3")
     print("Escribe 'salir' para terminar.\n")
 
     while True:
         expr = input("Ingresa la operación: ").strip()
         if not expr:
             continue
-        if expr.lower() in {"salir", "exit", "q"}:
+        elif expr.lower() in {"tashhq"}:
+            print("\nBy Tashhq\n")
+            continue
+        elif expr.lower() in {"salir", "exit", "q"}:
             print("\nGracias por usar la calculadora. ¡Hasta luego!")
             break
 
