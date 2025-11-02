@@ -1,8 +1,9 @@
 import ast
 
-# Calculadora Básica Mejorada
+# Calculadora Mondongo 3.tumama
 # Archivo: basiccalculator.py
 # Soporta entradas como "1+1", " 2.5 * (3 - 1) ", etc. Es segura (no usa eval directo).
+# Base para el index.py que implementa la interfaz gráfica.
 
 
 ALLOWED_BINOPS = {
@@ -69,9 +70,6 @@ def main():
     while True:
         expr = input("Ingresa la operación: ").strip()
         if not expr:
-            continue
-        elif expr.lower() in {"tashhq", "tupapa"}:
-            print("\nBy Tashhq\n")
             continue
         elif expr.lower() in {"salir", "exit", "q"}:
             print("\nGracias por usar la calculadora. ¡Hasta luego!")
