@@ -1,21 +1,44 @@
-# index.py
-# Interfaz gráfica (tkinter) que usa funciones del módulo basiccalculator.py si existen.
-# Guarda este archivo junto a basiccalculator.py y ejecútalo: python index.py
-
+#  (Esta parte que es grafica use inteligencia artificial para hacerla mas bonita)
 import tkinter as tk
 from tkinter import messagebox
 import importlib
 import ast
 import operator
 import math
+# Estilo dark minimalista tipo Windows 11
+DARK_BG = "#23272f"
+DARK_PANEL = "#2c313c"
+# Tema moderno oscuro (inspirado en Windows 11 / Fluent)
+DARK_BG = "#0d141d"
+DARK_PANEL = "#111521"
+DARK_BTN = "#3a3f4b"
+DARK_BTN_HOVER = "#50576a"
+DARK_TEXT = "#e6eef8"
+ACCENT = "#5aa0ff"
+ACCENT_DARK = "#3f82e6"
+FONT = ("Segoe UI Variable", 14)
+DISPLAY_FONT = ("Segoe UI Variable", 28, "bold")
 
-# intentar importar basiccalculator (debe estar en el mismo directorio)
+def style_button(btn, accent=False):
+    btn.configure(
+        bg=ACCENT if accent else DARK_BTN,
+        fg=DARK_TEXT,
+        activebackground=ACCENT_DARK if accent else DARK_BTN_HOVER,
+        activeforeground=DARK_TEXT,
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        font=("Segoe UI Variable", 16, "bold"),
+        padx=8,
+        pady=8,
+    )
+
+# Intento de usar un módulo externo "basiccalculator" si está disponible
 try:
     basiccalculator = importlib.import_module("basiccalculator")
-except Exception as e:
+except Exception:
     basiccalculator = None
 
-# Evaluador seguro alternativo (acepta números, operadores aritméticos y funciones de math)
 _ALLOWED_NAMES = {k: getattr(math, k) for k in dir(math) if not k.startswith("__")}
 _ALLOWED_NAMES.update({"abs": abs})
 
@@ -36,37 +59,281 @@ _unaryops = {
 
 def safe_eval(expr):
     """
-    Evalúa una expresión aritmética de forma segura usando ast.
-    Soporta números, + - * / ** % // y llamadas simples a funciones permitidas (math).
+    Evaluador seguro limitado — admite números, operadores aritméticos básicos,
+    llamadas a funciones matemáticas seguras y constantes de math.
     """
     def _eval(node):
         if isinstance(node, ast.Expression):
             return _eval(node.body)
-        if isinstance(node, ast.Num):  # numbers
+        elif isinstance(node, ast.Num):
             return node.n
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):  # py3.8+
+        elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return node.value
-        if isinstance(node, ast.BinOp):
+        elif isinstance(node, ast.BinOp):
             left = _eval(node.left)
             right = _eval(node.right)
             op_type = type(node.op)
             if op_type in _binops:
                 return _binops[op_type](left, right)
             raise ValueError("Operador no permitido")
-        if isinstance(node, ast.UnaryOp):
+        elif isinstance(node, ast.UnaryOp):
             operand = _eval(node.operand)
             op_type = type(node.op)
             if op_type in _unaryops:
                 return _unaryops[op_type](operand)
             raise ValueError("Operador unario no permitido")
-        if isinstance(node, ast.Call):
+        elif isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 func_name = node.func.id
                 if func_name in _ALLOWED_NAMES:
                     args = [_eval(a) for a in node.args]
                     return _ALLOWED_NAMES[func_name](*args)
             raise ValueError("Llamada a función no permitida")
-        if isinstance(node, ast.Name):
+        elif isinstance(node, ast.Name):
+            if node.id in _ALLOWED_NAMES:
+                return _ALLOWED_NAMES[node.id]
+            raise ValueError("Nombre no permitido")
+        raise ValueError("Expresión no permitida")
+    parsed = ast.parse(expr, mode="eval")
+    return _eval(parsed)
+
+def evaluate_with_basiccalculator(expr):
+    expr = expr.strip()
+    if not expr:
+        return ""
+    if basiccalculator is not None:
+        try:
+            if hasattr(basiccalculator, "evaluate"):
+                return basiccalculator.evaluate(expr)
+            elif hasattr(basiccalculator, "calculate"):
+                return basiccalculator.calculate(expr)
+            elif hasattr(basiccalculator, "BasicCalculator"):
+                cls = getattr(basiccalculator, "BasicCalculator")
+                try:
+                    inst = cls()
+                    if hasattr(inst, "evaluate"):
+                        return inst.evaluate(expr)
+                    elif hasattr(inst, "calculate"):
+                        return inst.calculate(expr)
+                except Exception:
+                    pass
+            # fallback básico
+        except Exception:
+            pass
+    return safe_eval(expr)
+
+class Calculator(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Calculadora Moderna")
+        self.configure(bg=DARK_BG)
+        self.resizable(False, False)
+        self._build_ui()
+        self._bind_keys()
+
+    def _build_ui(self):
+        pad = 14
+        # Contenedor principal con padding para "efecto tarjeta"
+        container = tk.Frame(self, bg=DARK_BG, padx=pad, pady=pad)
+        container.pack(fill="both", expand=True)
+
+        card = tk.Frame(container, bg=DARK_PANEL, bd=0, relief="flat")
+        card.pack()
+
+        # Display (Entry en modo readonly pero seleccionable)
+        self.display_var = tk.StringVar()
+        display_frame = tk.Frame(card, bg=DARK_PANEL, pady=12, padx=12)
+        display_frame.grid(row=0, column=0, columnspan=4, sticky="we", pady=(0, 8))
+        self.display = tk.Entry(display_frame, textvariable=self.display_var, font=DISPLAY_FONT,
+                                bg=DARK_PANEL, fg=DARK_TEXT, bd=0, relief="flat", justify="right",
+                                insertbackground=DARK_TEXT)
+        self.display.pack(fill="both", expand=True)
+        self.display.configure(state="normal")
+        buttons = [
+            ('C', 1, 0, "ctrl"), ('(', 1, 1), (')', 1, 2), ('⌫', 1, 3),
+            ('7', 2, 0), ('8', 2, 1), ('9', 2, 2), ('/', 2, 3),
+            ('4', 3, 0), ('5', 3, 1), ('6', 3, 2), ('*', 3, 3),
+            ('1', 4, 0), ('2', 4, 1), ('3', 4, 2), ('-', 4, 3),
+            ('0', 5, 0), ('.', 5, 1), ('%', 5, 2), ('+', 5, 3),
+            ('=', 6, 0, 4, "accent"),
+        ]
+
+        self.btn_refs = []
+        for b in buttons:
+            text = b[0]; row = b[1]; col = b[2]
+            colspan = 1
+            extra = None
+            if len(b) > 3:
+                colspan = b[3] if isinstance(b[3], int) else 1
+                if len(b) > 4:
+                    extra = b[4]
+            btn = tk.Button(card, text=text, command=lambda t=text: self.on_button(t))
+            accent = (extra == "accent")
+            style_button(btn, accent=accent)
+            btn.grid(row=row, column=col, columnspan=colspan, padx=8, pady=8, sticky="nsew")
+            # efecto hover
+            btn.bind("<Enter>", lambda e, b=btn, ac=accent: b.configure(bg=ACCENT if ac else DARK_BTN_HOVER))
+            btn.bind("<Leave>", lambda e, b=btn, ac=accent: b.configure(bg=ACCENT if ac else DARK_BTN))
+            self.btn_refs.append(btn)
+
+        # Configurar grid para que los botones sean responsivos
+        for r in range(1, 7):
+            card.grid_rowconfigure(r, weight=1)
+        for c in range(4):
+            card.grid_columnconfigure(c, weight=1)
+
+        # Pie: etiquetas pequeñas con atajos o versión (opcional)
+        footer = tk.Label(container, text="A santiago le gusta el pito",
+                          bg=DARK_BG, fg="#98a2b3", font=("Segoe UI Variable", 9))
+        footer.pack(pady=(8, 0))
+
+    def _bind_keys(self):
+        self.bind("<Return>", lambda e: self.on_button("="))
+        self.bind("<KP_Enter>", lambda e: self.on_button("="))
+        for key in "0123456789.+-*/()%":
+            self.bind(key, lambda e, k=key: self.on_button(k))
+        self.bind("<BackSpace>", lambda e: self.on_button("⌫"))
+        self.bind("<Escape>", lambda e: self.on_button("C"))
+
+    def on_button(self, char):
+        if char == "C":
+            self.display_var.set("")
+            return
+        if char == "⌫":
+            val = self.display_var.get()
+            self.display_var.set(val[:-1])
+            return
+        if char == "=":
+            expr = self.display_var.get()
+            try:
+                result = evaluate_with_basiccalculator(expr)
+                if isinstance(result, float) and result.is_integer():
+                    result = int(result)
+                self.display_var.set(str(result))
+            except Exception as e:
+                messagebox.showerror("Error", f"Expresión inválida o error:\n{e}")
+            return
+        current = self.display_var.get()
+        new = current + str(char)
+        self.display_var.set(new)
+
+if __name__ == "__main__":
+    app = Calculator()
+    app.mainloop()
+DARK_BTN_HOVER = "#50576a"
+DARK_TEXT = "#e5e6e8"
+ACCENT = "#4f8cff"
+
+def style_button(btn, accent=False):
+    btn.configure(
+        bg=ACCENT if accent else DARK_BTN,
+        fg=DARK_TEXT,
+        activebackground=DARK_BTN_HOVER if not accent else ACCENT,
+        activeforeground=DARK_TEXT,
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        font=("Segoe UI", 18, "bold")
+    )
+
+class Calculator(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Calculadora Básica | Tashhq")
+        self.resizable(False, False)
+        self.configure(bg=DARK_BG)
+        self._build_ui()
+
+    def _build_ui(self):
+        self.display = tk.Entry(self, font=("Segoe UI", 20, "bold"), borderwidth=0, relief="flat",
+                               justify="right", bg=DARK_PANEL, fg=DARK_TEXT, insertbackground=DARK_TEXT)
+        self.display.grid(row=0, column=0, columnspan=4, padx=12, pady=12, ipady=14, sticky="we")
+
+        buttons = [
+            ('7', 1, 0), ('8', 1, 1), ('9', 1, 2), ('/', 1, 3),
+            ('4', 2, 0), ('5', 2, 1), ('6', 2, 2), ('*', 2, 3),
+            ('1', 3, 0), ('2', 3, 1), ('3', 3, 2), ('-', 3, 3),
+            ('0', 4, 0), ('.', 4, 1), ('%', 4, 2), ('+', 4, 3),
+            ('C', 5, 0), ('<', 5, 1), ('(', 5, 2), (')', 5, 3),
+            ('=', 6, 0, 4)
+        ]
+
+        self.btn_refs = []
+        for (text, row, col, colspan) in [(b[0], b[1], b[2], b[3] if len(b) > 3 else 1) for b in buttons]:
+            accent = text == "="
+            btn = tk.Button(self, text=text, command=lambda t=text: self.on_button(t))
+            style_button(btn, accent)
+            btn.grid(row=row, column=col, columnspan=colspan, padx=6, pady=6, sticky="nsew")
+            self.btn_refs.append(btn)
+
+        for r in range(7):
+            self.grid_rowconfigure(r, weight=1)
+        for c in range(4):
+            self.grid_columnconfigure(c, weight=1)
+
+        self.bind("<Return>", lambda e: self.on_button("="))
+        self.bind("<KP_Enter>", lambda e: self.on_button("="))
+        for key in "0123456789.+-*/()%":
+            self.bind(key, lambda e, k=key: self.on_button(k))
+        self.bind("<BackSpace>", lambda e: self.on_button("<"))
+        self.bind("<Escape>", lambda e: self.on_button("C"))
+
+        # Hover effect
+        for btn in self.btn_refs:
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=DARK_BTN_HOVER if b["text"] != "=" else ACCENT))
+            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=ACCENT if b["text"] == "=" else DARK_BTN))
+try:
+    basiccalculator = importlib.import_module("basiccalculator")
+except Exception as e:
+    basiccalculator = None
+
+_ALLOWED_NAMES = {k: getattr(math, k) for k in dir(math) if not k.startswith("__")}
+_ALLOWED_NAMES.update({"abs": abs})
+
+_binops = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.Mod: operator.mod,
+    ast.FloorDiv: operator.floordiv,
+}
+
+_unaryops = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+def safe_eval(expr):
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        elif isinstance(node, ast.Num):  # numbers
+            return node.n
+        elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):  # py3.8+
+            return node.value
+        elif isinstance(node, ast.BinOp):
+            left = _eval(node.left)
+            right = _eval(node.right)
+            op_type = type(node.op)
+            if op_type in _binops:
+                return _binops[op_type](left, right)
+            raise ValueError("Operador no permitido")
+        elif isinstance(node, ast.UnaryOp):
+            operand = _eval(node.operand)
+            op_type = type(node.op)
+            if op_type in _unaryops:
+                return _unaryops[op_type](operand)
+            raise ValueError("Operador unario no permitido")
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+                if func_name in _ALLOWED_NAMES:
+                    args = [_eval(a) for a in node.args]
+                    return _ALLOWED_NAMES[func_name](*args)
+            raise ValueError("Llamada a función no permitida")
+        elif isinstance(node, ast.Name):
             if node.id in _ALLOWED_NAMES:
                 return _ALLOWED_NAMES[node.id]
             raise ValueError("Nombre no permitido")
@@ -82,43 +349,34 @@ def evaluate_with_basiccalculator(expr):
     # Intentar API común del módulo basiccalculator
     if basiccalculator is not None:
         try:
-            # función evaluate(expr)
             if hasattr(basiccalculator, "evaluate"):
                 return basiccalculator.evaluate(expr)
-            # función calculate(expr)
-            if hasattr(basiccalculator, "calculate"):
+            elif hasattr(basiccalculator, "calculate"):
                 return basiccalculator.calculate(expr)
-            # clase BasicCalculator con métodos evaluate o calculate
-            if hasattr(basiccalculator, "BasicCalculator"):
+            elif hasattr(basiccalculator, "BasicCalculator"):
                 cls = getattr(basiccalculator, "BasicCalculator")
                 try:
                     inst = cls()
                     if hasattr(inst, "evaluate"):
                         return inst.evaluate(expr)
-                    if hasattr(inst, "calculate"):
+                    elif hasattr(inst, "calculate"):
                         return inst.calculate(expr)
                 except Exception:
                     pass
-            # funciones elementales add, subtract, multiply, divide (caso raro)
             if all(hasattr(basiccalculator, name) for name in ("add", "subtract", "multiply", "divide")):
-                # tratar expresiones simples de la forma "a + b" separadas por espacios o símbolos
-                # aquí usamos safe_eval para obtener números y operador, luego delegamos si es binario
                 val = safe_eval(expr)
                 return val
         except Exception:
-            # si falla la llamada al módulo, seguimos al evaluador seguro
             pass
-    # fallback: evaluador seguro
     try:
         return safe_eval(expr)
     except Exception as e:
         raise
 
-# Interfaz tkinter
 class Calculator(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Calculadora")
+        self.title("Calculadora Básica | Tashhq")
         self.resizable(False, False)
         self._build_ui()
 
@@ -131,7 +389,7 @@ class Calculator(tk.Tk):
             ('4', 2, 0), ('5', 2, 1), ('6', 2, 2), ('*', 2, 3),
             ('1', 3, 0), ('2', 3, 1), ('3', 3, 2), ('-', 3, 3),
             ('0', 4, 0), ('.', 4, 1), ('%', 4, 2), ('+', 4, 3),
-            ('C', 5, 0), ('⌫', 5, 1), ('(', 5, 2), (')', 5, 3),
+            ('C', 5, 0), ('<', 5, 1), ('(', 5, 2), (')', 5, 3),
             ('=', 6, 0, 4)
         ]
 
@@ -140,7 +398,6 @@ class Calculator(tk.Tk):
                             command=lambda t=text: self.on_button(t))
             btn.grid(row=row, column=col, columnspan=colspan, padx=4, pady=4, sticky="nsew")
 
-        # configuraciones de grid para estiramiento
         for r in range(7):
             self.grid_rowconfigure(r, weight=1)
         for c in range(4):
@@ -158,10 +415,10 @@ class Calculator(tk.Tk):
         if char == "C":
             self.display.delete(0, tk.END)
             return
-        if char == "⌫":
+        elif char == "<":
             self.display.delete(len(self.display.get())-1, tk.END)
             return
-        if char == "=":
+        elif char == "=":
             expr = self.display.get()
             try:
                 result = evaluate_with_basiccalculator(expr)
