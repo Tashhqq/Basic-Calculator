@@ -70,7 +70,7 @@ def main():
         expr = input("Ingresa la operación: ").strip()
         if not expr:
             continue
-        elif expr.lower() in {"tashhq"}:
+        elif expr.lower() in {"tashhq", "tupapa"}:
             print("\nBy Tashhq\n")
             continue
         elif expr.lower() in {"salir", "exit", "q"}:
