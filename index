@@ -1,435 +1,296 @@
-#  (Esta parte que es grafica use inteligencia artificial para hacerla mas bonita)
-import tkinter as tk
-from tkinter import messagebox
+import sys
+import os
 import importlib
-import ast
-import operator
-import math
-# Estilo dark minimalista tipo Windows 11
-DARK_BG = "#23272f"
-DARK_PANEL = "#2c313c"
-# Tema moderno oscuro (inspirado en Windows 11 / Fluent)
-DARK_BG = "#0d141d"
-DARK_PANEL = "#111521"
-DARK_BTN = "#3a3f4b"
-DARK_BTN_HOVER = "#50576a"
-DARK_TEXT = "#e6eef8"
-ACCENT = "#5aa0ff"
-ACCENT_DARK = "#3f82e6"
-FONT = ("Segoe UI Variable", 14)
-DISPLAY_FONT = ("Segoe UI Variable", 28, "bold")
+import traceback
+from pathlib import Path
+from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtGui import QFontDatabase, QFont, QColor
 
-def style_button(btn, accent=False):
-    btn.configure(
-        bg=ACCENT if accent else DARK_BTN,
-        fg=DARK_TEXT,
-        activebackground=ACCENT_DARK if accent else DARK_BTN_HOVER,
-        activeforeground=DARK_TEXT,
-        relief="flat",
-        borderwidth=0,
-        highlightthickness=0,
-        font=("Segoe UI Variable", 16, "bold"),
-        padx=8,
-        pady=8,
-    )
+# index.py
+# Interfaz moderna y minimalista que usa la calculadora de basiccalculator.py
+# Requisitos: PyQt5 (pip install PyQt5). Opcional: requests si desea descargar la fuente automáticamente.
 
-# Intento de usar un módulo externo "basiccalculator" si está disponible
+
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QGridLayout, QSizePolicy, QFrame, QTextEdit
+)
+
+# Intentamos importar la calculadora del archivo basiccalculator.py en el mismo directorio.
+# El adaptador tratará de llamar a funciones/atributos comunes: calculate, evaluate, eval, BasicCalculator.evaluate
+calc_module = None
 try:
-    basiccalculator = importlib.import_module("basiccalculator")
+    spec = importlib.import_module("basiccalculator")
+    calc_module = spec
 except Exception:
-    basiccalculator = None
+    # Si falla la importación, calc_module queda None y mostraremos error al intentar evaluar.
+    calc_module = None
 
-_ALLOWED_NAMES = {k: getattr(math, k) for k in dir(math) if not k.startswith("__")}
-_ALLOWED_NAMES.update({"abs": abs})
-
-_binops = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.Pow: operator.pow,
-    ast.Mod: operator.mod,
-    ast.FloorDiv: operator.floordiv,
-}
-
-_unaryops = {
-    ast.UAdd: operator.pos,
-    ast.USub: operator.neg,
-}
-
-def safe_eval(expr):
-    """
-    Evaluador seguro limitado — admite números, operadores aritméticos básicos,
-    llamadas a funciones matemáticas seguras y constantes de math.
-    """
-    def _eval(node):
-        if isinstance(node, ast.Expression):
-            return _eval(node.body)
-        elif isinstance(node, ast.Num):
-            return node.n
-        elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-            return node.value
-        elif isinstance(node, ast.BinOp):
-            left = _eval(node.left)
-            right = _eval(node.right)
-            op_type = type(node.op)
-            if op_type in _binops:
-                return _binops[op_type](left, right)
-            raise ValueError("Operador no permitido")
-        elif isinstance(node, ast.UnaryOp):
-            operand = _eval(node.operand)
-            op_type = type(node.op)
-            if op_type in _unaryops:
-                return _unaryops[op_type](operand)
-            raise ValueError("Operador unario no permitido")
-        elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id
-                if func_name in _ALLOWED_NAMES:
-                    args = [_eval(a) for a in node.args]
-                    return _ALLOWED_NAMES[func_name](*args)
-            raise ValueError("Llamada a función no permitida")
-        elif isinstance(node, ast.Name):
-            if node.id in _ALLOWED_NAMES:
-                return _ALLOWED_NAMES[node.id]
-            raise ValueError("Nombre no permitido")
-        raise ValueError("Expresión no permitida")
-    parsed = ast.parse(expr, mode="eval")
-    return _eval(parsed)
-
-def evaluate_with_basiccalculator(expr):
-    expr = expr.strip()
-    if not expr:
-        return ""
-    if basiccalculator is not None:
-        try:
-            if hasattr(basiccalculator, "evaluate"):
-                return basiccalculator.evaluate(expr)
-            elif hasattr(basiccalculator, "calculate"):
-                return basiccalculator.calculate(expr)
-            elif hasattr(basiccalculator, "BasicCalculator"):
-                cls = getattr(basiccalculator, "BasicCalculator")
-                try:
-                    inst = cls()
-                    if hasattr(inst, "evaluate"):
-                        return inst.evaluate(expr)
-                    elif hasattr(inst, "calculate"):
-                        return inst.calculate(expr)
-                except Exception:
-                    pass
-            # fallback básico
-        except Exception:
-            pass
-    return safe_eval(expr)
-
-class Calculator(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Calculadora Moderna")
-        self.configure(bg=DARK_BG)
-        self.resizable(False, False)
-        self._build_ui()
-        self._bind_keys()
-
-    def _build_ui(self):
-        pad = 14
-        # Contenedor principal con padding para "efecto tarjeta"
-        container = tk.Frame(self, bg=DARK_BG, padx=pad, pady=pad)
-        container.pack(fill="both", expand=True)
-
-        card = tk.Frame(container, bg=DARK_PANEL, bd=0, relief="flat")
-        card.pack()
-
-        # Display (Entry en modo readonly pero seleccionable)
-        self.display_var = tk.StringVar()
-        display_frame = tk.Frame(card, bg=DARK_PANEL, pady=12, padx=12)
-        display_frame.grid(row=0, column=0, columnspan=4, sticky="we", pady=(0, 8))
-        self.display = tk.Entry(display_frame, textvariable=self.display_var, font=DISPLAY_FONT,
-                                bg=DARK_PANEL, fg=DARK_TEXT, bd=0, relief="flat", justify="right",
-                                insertbackground=DARK_TEXT)
-        self.display.pack(fill="both", expand=True)
-        self.display.configure(state="normal")
-        buttons = [
-            ('C', 1, 0, "ctrl"), ('(', 1, 1), (')', 1, 2), ('⌫', 1, 3),
-            ('7', 2, 0), ('8', 2, 1), ('9', 2, 2), ('/', 2, 3),
-            ('4', 3, 0), ('5', 3, 1), ('6', 3, 2), ('*', 3, 3),
-            ('1', 4, 0), ('2', 4, 1), ('3', 4, 2), ('-', 4, 3),
-            ('0', 5, 0), ('.', 5, 1), ('%', 5, 2), ('+', 5, 3),
-            ('=', 6, 0, 4, "accent"),
-        ]
-
-        self.btn_refs = []
-        for b in buttons:
-            text = b[0]; row = b[1]; col = b[2]
-            colspan = 1
-            extra = None
-            if len(b) > 3:
-                colspan = b[3] if isinstance(b[3], int) else 1
-                if len(b) > 4:
-                    extra = b[4]
-            btn = tk.Button(card, text=text, command=lambda t=text: self.on_button(t))
-            accent = (extra == "accent")
-            style_button(btn, accent=accent)
-            btn.grid(row=row, column=col, columnspan=colspan, padx=8, pady=8, sticky="nsew")
-            # efecto hover
-            btn.bind("<Enter>", lambda e, b=btn, ac=accent: b.configure(bg=ACCENT if ac else DARK_BTN_HOVER))
-            btn.bind("<Leave>", lambda e, b=btn, ac=accent: b.configure(bg=ACCENT if ac else DARK_BTN))
-            self.btn_refs.append(btn)
-
-        # Configurar grid para que los botones sean responsivos
-        for r in range(1, 7):
-            card.grid_rowconfigure(r, weight=1)
-        for c in range(4):
-            card.grid_columnconfigure(c, weight=1)
-
-        # Pie: etiquetas pequeñas con atajos o versión (opcional)
-        footer = tk.Label(container, text="A santiago le gusta el pito",
-                          bg=DARK_BG, fg="#98a2b3", font=("Segoe UI Variable", 9))
-        footer.pack(pady=(8, 0))
-
-    def _bind_keys(self):
-        self.bind("<Return>", lambda e: self.on_button("="))
-        self.bind("<KP_Enter>", lambda e: self.on_button("="))
-        for key in "0123456789.+-*/()%":
-            self.bind(key, lambda e, k=key: self.on_button(k))
-        self.bind("<BackSpace>", lambda e: self.on_button("⌫"))
-        self.bind("<Escape>", lambda e: self.on_button("C"))
-
-    def on_button(self, char):
-        if char == "C":
-            self.display_var.set("")
-            return
-        if char == "⌫":
-            val = self.display_var.get()
-            self.display_var.set(val[:-1])
-            return
-        if char == "=":
-            expr = self.display_var.get()
-            try:
-                result = evaluate_with_basiccalculator(expr)
-                if isinstance(result, float) and result.is_integer():
-                    result = int(result)
-                self.display_var.set(str(result))
-            except Exception as e:
-                messagebox.showerror("Error", f"Expresión inválida o error:\n{e}")
-            return
-        current = self.display_var.get()
-        new = current + str(char)
-        self.display_var.set(new)
-
-if __name__ == "__main__":
-    app = Calculator()
-    app.mainloop()
-DARK_BTN_HOVER = "#50576a"
-DARK_TEXT = "#e5e6e8"
-ACCENT = "#4f8cff"
-
-def style_button(btn, accent=False):
-    btn.configure(
-        bg=ACCENT if accent else DARK_BTN,
-        fg=DARK_TEXT,
-        activebackground=DARK_BTN_HOVER if not accent else ACCENT,
-        activeforeground=DARK_TEXT,
-        relief="flat",
-        borderwidth=0,
-        highlightthickness=0,
-        font=("Segoe UI", 18, "bold")
-    )
-
-class Calculator(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Calculadora Básica | Tashhq")
-        self.resizable(False, False)
-        self.configure(bg=DARK_BG)
-        self._build_ui()
-
-    def _build_ui(self):
-        self.display = tk.Entry(self, font=("Segoe UI", 20, "bold"), borderwidth=0, relief="flat",
-                               justify="right", bg=DARK_PANEL, fg=DARK_TEXT, insertbackground=DARK_TEXT)
-        self.display.grid(row=0, column=0, columnspan=4, padx=12, pady=12, ipady=14, sticky="we")
-
-        buttons = [
-            ('7', 1, 0), ('8', 1, 1), ('9', 1, 2), ('/', 1, 3),
-            ('4', 2, 0), ('5', 2, 1), ('6', 2, 2), ('*', 2, 3),
-            ('1', 3, 0), ('2', 3, 1), ('3', 3, 2), ('-', 3, 3),
-            ('0', 4, 0), ('.', 4, 1), ('%', 4, 2), ('+', 4, 3),
-            ('C', 5, 0), ('<', 5, 1), ('(', 5, 2), (')', 5, 3),
-            ('=', 6, 0, 4)
-        ]
-
-        self.btn_refs = []
-        for (text, row, col, colspan) in [(b[0], b[1], b[2], b[3] if len(b) > 3 else 1) for b in buttons]:
-            accent = text == "="
-            btn = tk.Button(self, text=text, command=lambda t=text: self.on_button(t))
-            style_button(btn, accent)
-            btn.grid(row=row, column=col, columnspan=colspan, padx=6, pady=6, sticky="nsew")
-            self.btn_refs.append(btn)
-
-        for r in range(7):
-            self.grid_rowconfigure(r, weight=1)
-        for c in range(4):
-            self.grid_columnconfigure(c, weight=1)
-
-        self.bind("<Return>", lambda e: self.on_button("="))
-        self.bind("<KP_Enter>", lambda e: self.on_button("="))
-        for key in "0123456789.+-*/()%":
-            self.bind(key, lambda e, k=key: self.on_button(k))
-        self.bind("<BackSpace>", lambda e: self.on_button("<"))
-        self.bind("<Escape>", lambda e: self.on_button("C"))
-
-        # Hover effect
-        for btn in self.btn_refs:
-            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=DARK_BTN_HOVER if b["text"] != "=" else ACCENT))
-            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=ACCENT if b["text"] == "=" else DARK_BTN))
-try:
-    basiccalculator = importlib.import_module("basiccalculator")
-except Exception as e:
-    basiccalculator = None
-
-_ALLOWED_NAMES = {k: getattr(math, k) for k in dir(math) if not k.startswith("__")}
-_ALLOWED_NAMES.update({"abs": abs})
-
-_binops = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.Pow: operator.pow,
-    ast.Mod: operator.mod,
-    ast.FloorDiv: operator.floordiv,
-}
-
-_unaryops = {
-    ast.UAdd: operator.pos,
-    ast.USub: operator.neg,
-}
-
-def safe_eval(expr):
-    def _eval(node):
-        if isinstance(node, ast.Expression):
-            return _eval(node.body)
-        elif isinstance(node, ast.Num):  # numbers
-            return node.n
-        elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):  # py3.8+
-            return node.value
-        elif isinstance(node, ast.BinOp):
-            left = _eval(node.left)
-            right = _eval(node.right)
-            op_type = type(node.op)
-            if op_type in _binops:
-                return _binops[op_type](left, right)
-            raise ValueError("Operador no permitido")
-        elif isinstance(node, ast.UnaryOp):
-            operand = _eval(node.operand)
-            op_type = type(node.op)
-            if op_type in _unaryops:
-                return _unaryops[op_type](operand)
-            raise ValueError("Operador unario no permitido")
-        elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id
-                if func_name in _ALLOWED_NAMES:
-                    args = [_eval(a) for a in node.args]
-                    return _ALLOWED_NAMES[func_name](*args)
-            raise ValueError("Llamada a función no permitida")
-        elif isinstance(node, ast.Name):
-            if node.id in _ALLOWED_NAMES:
-                return _ALLOWED_NAMES[node.id]
-            raise ValueError("Nombre no permitido")
-        raise ValueError("Expresión no permitida")
-
-    parsed = ast.parse(expr, mode="eval")
-    return _eval(parsed)
-
-def evaluate_with_basiccalculator(expr):
-    expr = expr.strip()
-    if not expr:
-        return ""
-    # Intentar API común del módulo basiccalculator
-    if basiccalculator is not None:
-        try:
-            if hasattr(basiccalculator, "evaluate"):
-                return basiccalculator.evaluate(expr)
-            elif hasattr(basiccalculator, "calculate"):
-                return basiccalculator.calculate(expr)
-            elif hasattr(basiccalculator, "BasicCalculator"):
-                cls = getattr(basiccalculator, "BasicCalculator")
-                try:
-                    inst = cls()
-                    if hasattr(inst, "evaluate"):
-                        return inst.evaluate(expr)
-                    elif hasattr(inst, "calculate"):
-                        return inst.calculate(expr)
-                except Exception:
-                    pass
-            if all(hasattr(basiccalculator, name) for name in ("add", "subtract", "multiply", "divide")):
-                val = safe_eval(expr)
-                return val
-        except Exception:
-            pass
+def evaluate_expression(expr: str) -> str:
+    """Intenta evaluar usando basiccalculator.* con varios nombres comunes."""
+    if not calc_module:
+        return "Error: basiccalculator.py no importado"
     try:
-        return safe_eval(expr)
+        # elimina espacios redundantes
+        expr_str = str(expr).strip()
+        for name in ("calculate", "evaluate", "eval", "compute"):
+            if hasattr(calc_module, name):
+                fn = getattr(calc_module, name)
+                try:
+                    return str(fn(expr_str))
+                except TypeError:
+                    # quizá requiere diferente llamada; continue para otros intentos
+                    pass
+        # Si hay una clase BasicCalculator con método evaluate/calculate
+        if hasattr(calc_module, "BasicCalculator"):
+            cls = getattr(calc_module, "BasicCalculator")
+            try:
+                inst = cls()
+                for name in ("evaluate", "calculate", "eval", "compute"):
+                    if hasattr(inst, name):
+                        return str(getattr(inst, name)(expr_str))
+            except Exception:
+                pass
+        # último recurso: si el módulo expone '__call__'
+        if callable(calc_module):
+            return str(calc_module(expr_str))
+        return "Error: función de evaluación no encontrada en basiccalculator.py"
     except Exception as e:
-        raise
+        return "Exception: " + str(e)
 
-class Calculator(tk.Tk):
+# Cargar fuente (opcional). Intentaremos cargar 'Inter' desde un archivo local o descargar si hay requests.
+def load_modern_font():
+    # lista de ubicaciones/recursos locales donde podría existir Inter/una fuente similar
+    candidate_names = ["Inter", "SF Pro Text", "Segoe UI", "Helvetica Neue", "Arial"]
+    # Intentamos cargar una fuente embebida si existe en carpeta 'fonts'
+    font_dir = Path(__file__).parent / "fonts"
+    if font_dir.exists():
+        for f in font_dir.glob("*.ttf"):
+            QFontDatabase.addApplicationFont(str(f))
+    # No forzamos descarga aquí para mantener dependencia mínima.
+    # Dejar que el sistema use el mejor disponible; devolver nombre preferido.
+    for name in candidate_names:
+        if QFont(name).family() != "":
+            return name
+    return QApplication.font().family()
+
+class FramelessWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.title("Calculadora Básica | Tashhq")
-        self.resizable(False, False)
-        self._build_ui()
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        # Permitir fondos transparentes para efecto de bordes redondeados
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.m_pos = None
+        self.setup_ui()
 
-    def _build_ui(self):
-        self.display = tk.Entry(self, font=("Arial", 20), borderwidth=4, relief="ridge", justify="right")
-        self.display.grid(row=0, column=0, columnspan=4, padx=8, pady=8, ipady=8, sticky="we")
+    def setup_ui(self):
+        # Cargar fuente moderna
+        font_name = load_modern_font()
+        base_font = QFont(font_name, 11)
+        self.setFont(base_font)
+
+        # Main container con fondo blur-like (semi-opaque)
+        container = QFrame()
+        container.setObjectName("container")
+        container.setStyleSheet("""
+        #container {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(255,255,255,230),
+                        stop:1 rgba(245,245,245,220));
+            border-radius: 14px;
+        }
+        """)
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(14, 14, 14, 14)
+        main_layout.setSpacing(10)
+
+        # Custom title bar
+        title_bar = QHBoxLayout()
+        title_bar.setContentsMargins(0, 0, 0, 0)
+        title_label = QLabel("Calculadora • Modern UI")
+        title_label.setStyleSheet("color: #111; font-weight: 600;")
+        title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        btn_min = QPushButton("—")
+        btn_min.setFixedSize(36, 28)
+        btn_min.setObjectName("btn")
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(36, 28)
+        btn_close.setObjectName("btn_close")
+
+        btn_min.clicked.connect(self.showMinimized)
+        btn_close.clicked.connect(self.close)
+
+        title_bar.addWidget(title_label)
+        title_bar.addWidget(btn_min)
+        title_bar.addWidget(btn_close)
+        main_layout.addLayout(title_bar)
+
+        # Display (read-only) con estilo moderno
+        self.display = QLabel("0")
+        self.display.setObjectName("display")
+        self.display.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.display.setFixedHeight(70)
+        self.display.setStyleSheet("""
+        #display {
+            background: transparent;
+            color: #071020;
+            font-size: 32px;
+            font-weight: 600;
+            padding-right: 14px;
+        }
+        """)
+        main_layout.addWidget(self.display)
+
+        # Grid de botones minimalistas y redondeados
+        btn_styles = """
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(255,255,255,255),
+                        stop:1 rgba(245,245,245,255));
+            border: none;
+            border-radius: 10px;
+            padding: 12px;
+            font-weight: 600;
+            color: #0b1220;
+        }
+        QPushButton:pressed {
+            background: rgba(200,200,200,0.8);
+        }
+        QPushButton#accent {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(0,122,255,255),
+                        stop:1 rgba(10,132,255,255));
+            color: white;
+        }
+        QPushButton#operator {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(240,240,240,255),
+                        stop:1 rgba(230,230,230,255));
+            color: #111;
+        }
+        QPushButton#btn_close {
+            background: transparent;
+            color: #ba1a1a;
+            font-weight: 700;
+        }
+        QPushButton#btn {
+            background: transparent;
+            color: #333;
+        }
+        """
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
 
         buttons = [
-            ('7', 1, 0), ('8', 1, 1), ('9', 1, 2), ('/', 1, 3),
-            ('4', 2, 0), ('5', 2, 1), ('6', 2, 2), ('*', 2, 3),
-            ('1', 3, 0), ('2', 3, 1), ('3', 3, 2), ('-', 3, 3),
-            ('0', 4, 0), ('.', 4, 1), ('%', 4, 2), ('+', 4, 3),
-            ('C', 5, 0), ('<', 5, 1), ('(', 5, 2), (')', 5, 3),
-            ('=', 6, 0, 4)
+            ('C', 0, 0), ('⌫', 0, 1), ('%', 0, 2), ('/', 0, 3),
+            ('7', 1, 0), ('8', 1, 1), ('9', 1, 2), ('*', 1, 3),
+            ('4', 2, 0), ('5', 2, 1), ('6', 2, 2), ('-', 2, 3),
+            ('1', 3, 0), ('2', 3, 1), ('3', 3, 2), ('+', 3, 3),
+            ('±', 4, 0), ('0', 4, 1), ('.', 4, 2), ('=', 4, 3),
         ]
 
-        for (text, row, col, colspan) in [(b[0], b[1], b[2], b[3] if len(b) > 3 else 1) for b in buttons]:
-            btn = tk.Button(self, text=text, font=("Arial", 18), width=4, height=1,
-                            command=lambda t=text: self.on_button(t))
-            btn.grid(row=row, column=col, columnspan=colspan, padx=4, pady=4, sticky="nsew")
+        self.btn_map = {}
+        for text, r, c in buttons:
+            b = QPushButton(text)
+            b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            b.setMinimumHeight(56)
+            if text in ('=',):
+                b.setObjectName("accent")
+            elif text in ('/', '*', '-', '+', '%'):
+                b.setObjectName("operator")
+            self.btn_map[text] = b
+            grid.addWidget(b, r, c)
 
-        for r in range(7):
-            self.grid_rowconfigure(r, weight=1)
-        for c in range(4):
-            self.grid_columnconfigure(c, weight=1)
+        main_layout.addLayout(grid)
+        # Footer small credits
+        footer = QLabel("Diseño moderno • Minimal • Usa basiccalculator.py")
+        footer.setStyleSheet("color: #6b7280; font-size: 10px;")
+        main_layout.addWidget(footer, alignment=Qt.AlignRight)
 
-        # atajos de teclado
-        self.bind("<Return>", lambda e: self.on_button("="))
-        self.bind("<KP_Enter>", lambda e: self.on_button("="))
-        for key in "0123456789.+-*/()%":
-            self.bind(key, lambda e, k=key: self.on_button(k))
-        self.bind("<BackSpace>", lambda e: self.on_button("⌫"))
-        self.bind("<Escape>", lambda e: self.on_button("C"))
+        # Apply overall stylesheet (container styles + buttons)
+        full_style = """
+        QWidget {
+            font-family: "%s";
+        }
+        %s
+        """ % (QApplication.font().family(), btn_styles)
+        container.setStyleSheet(container.styleSheet() + "\n" + btn_styles)
 
-    def on_button(self, char):
-        if char == "C":
-            self.display.delete(0, tk.END)
-            return
-        elif char == "<":
-            self.display.delete(len(self.display.get())-1, tk.END)
-            return
-        elif char == "=":
-            expr = self.display.get()
-            try:
-                result = evaluate_with_basiccalculator(expr)
-                self.display.delete(0, tk.END)
-                self.display.insert(0, str(result))
-            except Exception as e:
-                messagebox.showerror("Error", f"Expresión inválida o error: {e}")
-            return
-        # insertar carácter normal
-        self.display.insert(tk.END, char)
+        # Layout wrapper
+        wrapper = QVBoxLayout(self)
+        wrapper.setContentsMargins(10, 10, 10, 10)
+        wrapper.addWidget(container)
+
+        # Conexiones botones
+        for k, btn in self.btn_map.items():
+            if k == 'C':
+                btn.clicked.connect(self.clear_display)
+            elif k == '⌫':
+                btn.clicked.connect(self.backspace)
+            elif k == '=':
+                btn.clicked.connect(self.calculate_result)
+            elif k == '±':
+                btn.clicked.connect(self.toggle_sign)
+            else:
+                btn.clicked.connect(lambda checked, t=k: self.push_token(t))
+
+        # Tamaño inicial y sombra
+        self.resize(420, 560)
+        self.setStyleSheet("background: transparent;")
+
+    # Comportamiento del display y botones
+    def push_token(self, token):
+        cur = self.display.text()
+        if cur == "0" and token not in ('.',):
+            cur = ""
+        new = cur + token
+        self.display.setText(new)
+
+    def clear_display(self):
+        self.display.setText("0")
+
+    def backspace(self):
+        cur = self.display.text()
+        if len(cur) <= 1:
+            self.display.setText("0")
+        else:
+            self.display.setText(cur[:-1])
+
+    def toggle_sign(self):
+        cur = self.display.text()
+        if cur.startswith("-"):
+            self.display.setText(cur[1:])
+        else:
+            if cur != "0":
+                self.display.setText("-" + cur)
+
+    def calculate_result(self):
+        expr = self.display.text()
+        # reemplazamos multiplicación y división visual por símbolos de cálculo
+        expr = expr.replace('×', '*').replace('÷', '/')
+        result = evaluate_expression(expr)
+        self.display.setText(result)
+
+    # Permitir arrastrar la ventana desde cualquier lugar del widget (o mejorar selectivamente)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.m_pos = event.globalPos() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event):
+        if self.m_pos and event.buttons() & Qt.LeftButton:
+            self.move(event.globalPos() - self.m_pos)
+
+    def mouseReleaseEvent(self, event):
+        self.m_pos = None
 
 if __name__ == "__main__":
-    app = Calculator()
-    app.mainloop()
+    app = QApplication(sys.argv)
+    # Altos DPI
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+
+    win = FramelessWindow()
+    win.show()
+    sys.exit(app.exec_())
