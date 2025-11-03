@@ -26,7 +26,7 @@ def safe_eval(expr: str):
     """
     Evalúa una expresión aritmética simple de forma segura usando ast.
     Permite números, paréntesis, operadores binarios y unarios listados arriba.
-    Lanza ValueError para entradas no permitidas.
+    Lanza ValueError para entradas no permitidas. :D
     """
     try:
         node = ast.parse(expr, mode="eval")
